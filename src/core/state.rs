@@ -1,3 +1,5 @@
+use std::iter;
+
 use winit::{event::WindowEvent, window::Window};
 
 pub struct State {
@@ -5,8 +7,9 @@ pub struct State {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
-    size: winit::dpi::PhysicalSize<u32>,
+    pub size: winit::dpi::PhysicalSize<u32>,
     window: Window,
+    clear_color: wgpu::Color,
 }
 
 impl State {
@@ -77,6 +80,7 @@ impl State {
             view_formats: vec![],
         };
         surface.configure(&device, &config);
+        let clear_color = wgpu::Color::BLACK;
         Self {
             window,
             surface,
@@ -84,6 +88,7 @@ impl State {
             queue,
             config,
             size,
+            clear_color,
         }
     }
 
@@ -91,19 +96,61 @@ impl State {
         &self.window
     }
 
-    fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        todo!()
+    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+        if new_size.width > 0 && new_size.height > 0 {
+            self.size = new_size;
+            self.config.width = new_size.width;
+            self.config.height = new_size.height;
+            self.surface.configure(&self.device, &self.config);
+        }
+    }
+    #[allow(unused_variables)]
+    pub fn input(&mut self, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::CursorMoved { position, .. } => {
+                self.clear_color = wgpu::Color {
+                    r: position.x as f64 / self.size.width as f64,
+                    g: position.y as f64 / self.size.height as f64,
+                    b: 1.0,
+                    a: 1.0,
+                };
+                true
+            }
+            _ => false,
+        }
     }
 
-    fn input(&mut self, event: &WindowEvent) -> bool {
-        todo!()
-    }
+    pub fn update(&mut self) {}
+    pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+        let output = self.surface.get_current_texture()?;
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
-    fn update(&mut self) {
-        todo!()
-    }
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
 
-    fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        todo!()
+        {
+            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(self.clear_color),
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
+        }
+
+        self.queue.submit(iter::once(encoder.finish()));
+        output.present();
+
+        Ok(())
     }
 }
