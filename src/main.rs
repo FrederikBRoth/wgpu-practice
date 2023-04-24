@@ -1,4 +1,4 @@
 use wgpu_practice::ui::window::run;
 fn main() {
-    run();
+    pollster::block_on(run());
 }

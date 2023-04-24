@@ -27,6 +27,11 @@ impl State {
         // State owns the window so this should be safe.
         let surface = unsafe { instance.create_surface(&window) }.unwrap();
 
+        instance
+            .enumerate_adapters(wgpu::Backends::all())
+            .for_each(|a| println!("{a:?}"));
+        // Check if this adapter supports our surface
+
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
@@ -44,7 +49,7 @@ impl State {
                     limits: if cfg!(target_arch = "wasm32") {
                         wgpu::Limits::downlevel_webgl2_defaults()
                     } else {
-                        wgpu::Limits::default()
+                        wgpu::Limits::downlevel_defaults()
                     },
                     label: None,
                 },
