@@ -6,6 +6,7 @@ struct VertexOutput {
     @location(0) vert_pos: vec3<f32>,
 };
 
+//Vertex shader part
 @vertex
 fn vs_main(
     @builtin(vertex_index) in_vertex_index: u32,
@@ -17,7 +18,7 @@ fn vs_main(
     out.vert_pos = out.clip_position.xyz;
     return out;
 }
-    
+//Fragment shader part
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     return vec4<f32>(0.3, 0.2, 0.1, 1.0);
