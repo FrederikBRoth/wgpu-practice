@@ -1,7 +1,8 @@
 use std::iter;
-
-use wgpu::include_wgsl;
+use wgpu::util::DeviceExt;
 use winit::{event::WindowEvent, window::Window};
+
+use super::vertex::{Vertex, VERTICES};
 
 pub struct State {
     surface: wgpu::Surface,
@@ -12,6 +13,8 @@ pub struct State {
     window: Window,
     clear_color: wgpu::Color,
     render_pipeline: wgpu::RenderPipeline,
+    vertex_buffer: wgpu::Buffer,
+    num_vertices: u32,
 }
 
 impl State {
@@ -51,10 +54,9 @@ impl State {
                     features: wgpu::Features::empty(),
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web we'll have to disable some.
-                    limits: if cfg!(target_arch = "wasm32") {
-                        wgpu::Limits::downlevel_webgl2_defaults()
-                    } else {
-                        wgpu::Limits::downlevel_defaults()
+                    limits: match cfg!(target_arch = "wasm32") {
+                        true => wgpu::Limits::downlevel_webgl2_defaults(),
+                        false => wgpu::Limits::downlevel_webgl2_defaults(),
                     },
                     label: None,
                 },
@@ -101,8 +103,8 @@ impl State {
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main", // 1.
-                buffers: &[],           // 2.
+                entry_point: "vs_main",     // 1.
+                buffers: &[Vertex::desc()], // 2.
             },
             fragment: Some(wgpu::FragmentState {
                 // 3.
@@ -136,6 +138,14 @@ impl State {
             multiview: None, // 5.
         });
 
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let num_vertices = VERTICES.len() as u32;
+
         Self {
             window,
             surface,
@@ -145,6 +155,8 @@ impl State {
             size,
             clear_color,
             render_pipeline,
+            vertex_buffer,
+            num_vertices,
         }
     }
 
@@ -203,7 +215,8 @@ impl State {
                 depth_stencil_attachment: None,
             });
             render_pass.set_pipeline(&self.render_pipeline); // 2.
-            render_pass.draw(0..3, 0..1); // 3.
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.draw(0..self.num_vertices, 0..1); // 3.
         }
         self.queue.submit(iter::once(encoder.finish()));
         output.present();
