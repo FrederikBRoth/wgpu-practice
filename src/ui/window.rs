@@ -12,6 +12,7 @@ pub async fn run() {
 
     let mut state = state::State::new(window).await;
 
+    state.clear_color = wgpu::Color::BLUE;
     event_loop.run(move |event, _, control_flow| {
         match event {
             Event::WindowEvent {
