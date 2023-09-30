@@ -1,15 +1,18 @@
 use std::iter;
-use wgpu::util::DeviceExt;
+use wgpu::util::{DeviceExt, RenderEncoder};
 use winit::{
     event::{KeyboardInput, VirtualKeyCode, WindowEvent},
     window::Window,
 };
 
-use super::vertex::{Vertex, INDICES, VERTICES};
+use super::{
+    polygon::{self, *},
+    vertex::Vertex,
+};
 
 pub struct State {
     surface: wgpu::Surface,
-    device: wgpu::Device,
+    pub device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
@@ -19,6 +22,8 @@ pub struct State {
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     num_indices: u32,
+    polygon: Polygon,
+    polygon_buffer: Vec<PolygonBuffer>,
 }
 
 impl State {
@@ -142,20 +147,50 @@ impl State {
             multiview: None, // 5.
         });
 
+        let polygon: Polygon = Polygon {
+            vertices: vec![
+                Vertex {
+                    position: [-0.0868241, 0.49240386, 0.0],
+                    color: [0.5, 0.0, 0.5],
+                }, // A
+                Vertex {
+                    position: [-0.49513406, 0.06958647, 0.0],
+                    color: [0.5, 0.0, 0.5],
+                }, // B
+                Vertex {
+                    position: [-0.21918549, -0.44939706, 0.0],
+                    color: [0.5, 0.0, 0.5],
+                }, // C
+                Vertex {
+                    position: [0.35966998, -0.3473291, 0.0],
+                    color: [0.5, 0.0, 0.5],
+                }, // D
+                Vertex {
+                    position: [0.44147372, 0.2347359, 0.0],
+                    color: [0.5, 0.0, 0.5],
+                }, // E
+            ],
+            indices: vec![0, 1, 4, 1, 2, 4, 2, 3, 4],
+        };
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(VERTICES),
+            contents: bytemuck::cast_slice(&polygon.vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(INDICES),
+            contents: bytemuck::cast_slice(&polygon.indices),
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        let num_indices = INDICES.len() as u32;
+        let num_indices = polygon.indices.len() as u32;
 
+        let polygon_buffer = vec![
+            random_polygon(&device),
+            random_polygon(&device),
+            random_polygon(&device),
+        ];
         Self {
             window,
             surface,
@@ -168,6 +203,8 @@ impl State {
             vertex_buffer,
             index_buffer,
             num_indices,
+            polygon,
+            polygon_buffer,
         }
     }
 
@@ -204,7 +241,7 @@ impl State {
                     },
                 ..
             } => {
-                println!("Space pressed");
+                self.polygon_buffer.push(random_polygon(&self.device));
                 true
             }
             _ => false,
@@ -238,9 +275,14 @@ impl State {
                 depth_stencil_attachment: None,
             });
             render_pass.set_pipeline(&self.render_pipeline); // 2.
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1); // 3.
+                                                             // render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+                                                             // render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            for polygon in &self.polygon_buffer {
+                render_pass.set_vertex_buffer(0, polygon.vertex_buffer.slice(..));
+                render_pass
+                    .set_index_buffer(polygon.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                render_pass.draw_indexed(0..polygon.num_indices, 0, 0..1)
+            } // render_pass.draw_indexed(0..self.num_indices, 0, 0..1); // 3.
         }
         self.queue.submit(iter::once(encoder.finish()));
         output.present();
