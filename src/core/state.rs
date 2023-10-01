@@ -1,15 +1,11 @@
 use std::iter;
-use wgpu::util::{DeviceExt, RenderEncoder};
+use wgpu::util::DeviceExt;
 use winit::{
     event::{KeyboardInput, VirtualKeyCode, WindowEvent},
     window::Window,
 };
 
-use super::{
-    polygon::{self, *},
-    vertex::Vertex,
-};
-
+use super::{mesh::*, texture, vertex::Vertex};
 pub struct State {
     surface: wgpu::Surface,
     pub device: wgpu::Device,
@@ -19,11 +15,9 @@ pub struct State {
     window: Window,
     pub clear_color: wgpu::Color,
     render_pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
-    num_indices: u32,
-    polygon: Polygon,
-    polygon_buffer: Vec<PolygonBuffer>,
+    polygon_buffer: Vec<MeshBuffer>,
+    diffuse_bind_group: wgpu::BindGroup,
+    diffuse_texture: texture::Texture,
 }
 
 impl State {
@@ -100,10 +94,35 @@ impl State {
             source: wgpu::ShaderSource::Wgsl(include_str!("../shader.wgsl").into()),
         });
 
+        let texture_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        // This should match the filterable field of the
+                        // corresponding Texture entry above.
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+                label: Some("texture_bind_group_layout"),
+            });
+
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[],
+                bind_group_layouts: &[&texture_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -147,50 +166,23 @@ impl State {
             multiview: None, // 5.
         });
 
-        let polygon: Polygon = Polygon {
-            vertices: vec![
-                Vertex {
-                    position: [-0.0868241, 0.49240386, 0.0],
-                    color: [0.5, 0.0, 0.5],
-                }, // A
-                Vertex {
-                    position: [-0.49513406, 0.06958647, 0.0],
-                    color: [0.5, 0.0, 0.5],
-                }, // B
-                Vertex {
-                    position: [-0.21918549, -0.44939706, 0.0],
-                    color: [0.5, 0.0, 0.5],
-                }, // C
-                Vertex {
-                    position: [0.35966998, -0.3473291, 0.0],
-                    color: [0.5, 0.0, 0.5],
-                }, // D
-                Vertex {
-                    position: [0.44147372, 0.2347359, 0.0],
-                    color: [0.5, 0.0, 0.5],
-                }, // E
+        let polygon_buffer = vec![make_pentagon(&device)];
+        let diffuse_texture =
+            texture::Texture::from_bytes(&device, &queue, "happy-tree.png").unwrap(); // CHANGED!
+        let diffuse_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view), // CHANGED!
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler), // CHANGED!
+                },
             ],
-            indices: vec![0, 1, 4, 1, 2, 4, 2, 3, 4],
-        };
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&polygon.vertices),
-            usage: wgpu::BufferUsages::VERTEX,
+            label: Some("diffuse_bind_group"),
         });
-
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(&polygon.indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-
-        let num_indices = polygon.indices.len() as u32;
-
-        let polygon_buffer = vec![
-            random_polygon(&device),
-            random_polygon(&device),
-            random_polygon(&device),
-        ];
         Self {
             window,
             surface,
@@ -200,11 +192,9 @@ impl State {
             size,
             clear_color,
             render_pipeline,
-            vertex_buffer,
-            index_buffer,
-            num_indices,
-            polygon,
             polygon_buffer,
+            diffuse_bind_group,
+            diffuse_texture,
         }
     }
 
@@ -241,7 +231,7 @@ impl State {
                     },
                 ..
             } => {
-                self.polygon_buffer.push(random_polygon(&self.device));
+                self.polygon_buffer.push(make_pentagon(&self.device));
                 true
             }
             _ => false,
@@ -276,7 +266,7 @@ impl State {
             });
             render_pass.set_pipeline(&self.render_pipeline); // 2.
                                                              // render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-                                                             // render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]); // render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             for polygon in &self.polygon_buffer {
                 render_pass.set_vertex_buffer(0, polygon.vertex_buffer.slice(..));
                 render_pass
