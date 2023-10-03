@@ -1,4 +1,4 @@
-use cgmath::num_traits::ToPrimitive;
+use cgmath::{num_traits::ToPrimitive, InnerSpace, Rotation3};
 use std::iter;
 use wgpu::util::DeviceExt;
 use winit::{
@@ -8,6 +8,7 @@ use winit::{
 
 use super::{
     camera::{Camera, CameraController},
+    instance::{self, instances_list, Instance, InstanceController, InstanceRaw},
     mesh::*,
     texture,
     vertex::Vertex,
@@ -15,7 +16,7 @@ use super::{
 pub struct State {
     surface: wgpu::Surface,
     pub device: wgpu::Device,
-    queue: wgpu::Queue,
+    pub queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
     window: Window,
@@ -26,6 +27,7 @@ pub struct State {
     diffuse_texture: texture::Texture,
     camera: Camera,
     camera_controller: CameraController,
+    pub instance_controller: InstanceController,
 }
 
 impl State {
@@ -39,7 +41,6 @@ impl State {
             backends: wgpu::Backends::all(),
             dx12_shader_compiler: Default::default(),
         });
-
         // # Safety
         //
         // The surface needs to live as long as the window that created it.
@@ -77,6 +78,7 @@ impl State {
             .unwrap();
 
         let camera = Camera::new(size.height, size.width, &device);
+        let instance_controller = InstanceController::new(instances_list(), &device);
 
         let surface_caps = surface.get_capabilities(&adapter);
         // Shader code in this tutorial assumes an sRGB surface texture. Using a different
@@ -142,8 +144,8 @@ impl State {
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main",     // 1.
-                buffers: &[Vertex::desc()], // 2.
+                entry_point: "vs_main",                          // 1.
+                buffers: &[Vertex::desc(), InstanceRaw::desc()], // 2.
             },
             fragment: Some(wgpu::FragmentState {
                 // 3.
@@ -214,6 +216,7 @@ impl State {
             diffuse_texture,
             camera,
             camera_controller,
+            instance_controller,
         }
     }
 
@@ -251,7 +254,34 @@ impl State {
                     },
                 ..
             } => {
-                self.polygon_buffer.push(make_pentagon(&self.device));
+                // self.polygon_buffer.push(make_pentagon(&self.device));
+                self.instance_controller.remove_instance(0);
+                true
+            }
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        state,
+                        virtual_keycode: Some(VirtualKeyCode::R),
+                        ..
+                    },
+                ..
+            } => {
+                let position = cgmath::Vector3 {
+                    x: 0.0,
+                    y: 1.0,
+                    z: 0.0,
+                };
+                self.instance_controller.add_instance(
+                    Instance {
+                        position,
+                        rotation: cgmath::Quaternion::from_axis_angle(
+                            position.normalize(),
+                            cgmath::Deg(45.0),
+                        ),
+                    },
+                    &self.queue,
+                );
                 true
             }
             _ => false,
@@ -298,11 +328,16 @@ impl State {
                                                              // render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]); // render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.set_bind_group(1, &self.camera.camera_bind_group, &[]);
+            render_pass.set_vertex_buffer(1, self.instance_controller.instance_buffer.slice(..));
             for polygon in &self.polygon_buffer {
                 render_pass.set_vertex_buffer(0, polygon.vertex_buffer.slice(..));
                 render_pass
                     .set_index_buffer(polygon.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-                render_pass.draw_indexed(0..polygon.num_indices, 0, 0..1)
+                render_pass.draw_indexed(
+                    0..polygon.num_indices,
+                    0,
+                    0..self.instance_controller.instances.len() as _,
+                );
             } // render_pass.draw_indexed(0..self.num_indices, 0, 0..1); // 3.
         }
         self.queue.submit(iter::once(encoder.finish()));
