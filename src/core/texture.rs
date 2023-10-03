@@ -8,8 +8,13 @@ pub struct Texture {
 }
 
 impl Texture {
-    pub fn from_bytes(device: &wgpu::Device, queue: &wgpu::Queue, label: &str) -> Result<Self> {
-        let img = image::load_from_memory(include_bytes!("../assets/happy-tree.bdff8a19.png"))?;
+    pub fn from_bytes(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        label: &str,
+        bytes: &[u8],
+    ) -> Result<Self> {
+        let img = image::load_from_memory(bytes)?;
         Self::from_image(device, queue, &img, Some(label))
     }
 

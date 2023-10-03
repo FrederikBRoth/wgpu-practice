@@ -16,3 +16,5 @@ rand = "0.8"
 
 image = { version = "0.24", features = ["png", "jpeg"]}
 anyhow = "1.0"
+
+cgmath = "0.18"

@@ -1,3 +1,4 @@
+use cgmath::num_traits::ToPrimitive;
 use std::iter;
 use wgpu::util::DeviceExt;
 use winit::{
@@ -5,7 +6,12 @@ use winit::{
     window::Window,
 };
 
-use super::{mesh::*, texture, vertex::Vertex};
+use super::{
+    camera::{Camera, CameraController},
+    mesh::*,
+    texture,
+    vertex::Vertex,
+};
 pub struct State {
     surface: wgpu::Surface,
     pub device: wgpu::Device,
@@ -18,6 +24,8 @@ pub struct State {
     polygon_buffer: Vec<MeshBuffer>,
     diffuse_bind_group: wgpu::BindGroup,
     diffuse_texture: texture::Texture,
+    camera: Camera,
+    camera_controller: CameraController,
 }
 
 impl State {
@@ -67,6 +75,9 @@ impl State {
             )
             .await
             .unwrap();
+
+        let camera = Camera::new(size.height, size.width, &device);
+
         let surface_caps = surface.get_capabilities(&adapter);
         // Shader code in this tutorial assumes an sRGB surface texture. Using a different
         // one will result all the colors coming out darker. If you want to support non
@@ -122,7 +133,7 @@ impl State {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[&texture_bind_group_layout],
+                bind_group_layouts: &[&texture_bind_group_layout, &camera.camera_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -167,8 +178,13 @@ impl State {
         });
 
         let polygon_buffer = vec![make_pentagon(&device)];
-        let diffuse_texture =
-            texture::Texture::from_bytes(&device, &queue, "happy-tree.png").unwrap(); // CHANGED!
+        let diffuse_texture = texture::Texture::from_bytes(
+            &device,
+            &queue,
+            "happy tree",
+            include_bytes!("../assets/happy-tree.bdff8a19.png"),
+        )
+        .unwrap(); // CHANGED!
         let diffuse_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &texture_bind_group_layout,
             entries: &[
@@ -183,6 +199,7 @@ impl State {
             ],
             label: Some("diffuse_bind_group"),
         });
+        let camera_controller = CameraController::new(0.2);
         Self {
             window,
             surface,
@@ -195,6 +212,8 @@ impl State {
             polygon_buffer,
             diffuse_bind_group,
             diffuse_texture,
+            camera,
+            camera_controller,
         }
     }
 
@@ -212,6 +231,7 @@ impl State {
     }
     #[allow(unused_variables)]
     pub fn input(&mut self, event: &WindowEvent) -> bool {
+        self.camera_controller.process_events(event);
         match event {
             WindowEvent::CursorMoved { position, .. } => {
                 self.clear_color = wgpu::Color {
@@ -238,7 +258,17 @@ impl State {
         }
     }
 
-    pub fn update(&mut self) {}
+    pub fn update(&mut self) {
+        self.camera_controller.update_camera(&mut self.camera);
+        self.camera
+            .camera_uniform
+            .update_view_proj(&self.camera.camera);
+        self.queue.write_buffer(
+            &self.camera.camera_buffer,
+            0,
+            bytemuck::cast_slice(&[self.camera.camera_uniform]),
+        );
+    }
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output
@@ -267,6 +297,7 @@ impl State {
             render_pass.set_pipeline(&self.render_pipeline); // 2.
                                                              // render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]); // render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.set_bind_group(1, &self.camera.camera_bind_group, &[]);
             for polygon in &self.polygon_buffer {
                 render_pass.set_vertex_buffer(0, polygon.vertex_buffer.slice(..));
                 render_pass
