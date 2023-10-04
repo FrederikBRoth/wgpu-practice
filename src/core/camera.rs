@@ -159,6 +159,10 @@ pub struct CameraController {
     scroll: f32,
     speed: f32,
     sensitivity: f32,
+    prev_x: f32,
+    prev_y: f32,
+    delta_x: f32,
+    delta_y: f32,
 }
 
 impl CameraController {
@@ -175,6 +179,10 @@ impl CameraController {
             scroll: 0.0,
             speed,
             sensitivity,
+            prev_x: 0.0,
+            prev_y: 0.0,
+            delta_x: 0.0,
+            delta_y: 0.0,
         }
     }
 
@@ -213,10 +221,9 @@ impl CameraController {
         }
     }
 
-    pub fn process_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {
-        self.rotate_horizontal = mouse_dx as f32;
-        self.rotate_vertical = mouse_dy as f32;
-        println!("test")
+    pub fn process_mouse(&mut self) {
+        self.rotate_horizontal = self.delta_x;
+        self.rotate_vertical = self.delta_y;
     }
 
     pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
@@ -225,6 +232,14 @@ impl CameraController {
             MouseScrollDelta::LineDelta(_, scroll) => scroll * 100.0,
             MouseScrollDelta::PixelDelta(PhysicalPosition { y: scroll, .. }) => *scroll as f32,
         };
+    }
+
+    pub fn process_delta(&mut self, delta: (f64, f64)) {
+        self.delta_x = self.prev_x - delta.0 as f32;
+        self.delta_y = self.prev_y - delta.1 as f32;
+        self.prev_x = delta.0 as f32;
+        self.prev_y = delta.1 as f32;
+        println!("{}, {}", self.delta_x, self.delta_y);
     }
 
     /// .

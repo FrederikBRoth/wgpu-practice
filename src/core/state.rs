@@ -25,7 +25,7 @@ pub struct State {
     polygon_buffer: Vec<MeshBuffer>,
     diffuse_bind_group: wgpu::BindGroup,
     diffuse_texture: texture::Texture,
-    camera: Camera,
+    pub camera: Camera,
     pub camera_controller: CameraController,
     pub instance_controller: InstanceController,
     pub mouse_pressed: bool,
@@ -36,6 +36,7 @@ impl State {
     pub async fn new(window: Window) -> Self {
         let size = window.inner_size();
 
+        window.set_cursor_grab(winit::window::CursorGrabMode::Locked);
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -50,12 +51,12 @@ impl State {
 
         instance
             .enumerate_adapters(wgpu::Backends::all())
-            .for_each(|a| println!("{a:?}"));
+            .for_each(|a| println!("{}", a.get_info().name));
         // Check if this adapter supports our surface
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
+                power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
@@ -69,7 +70,7 @@ impl State {
                     // we're building for the web we'll have to disable some.
                     limits: match cfg!(target_arch = "wasm32") {
                         true => wgpu::Limits::downlevel_webgl2_defaults(),
-                        false => wgpu::Limits::downlevel_webgl2_defaults(),
+                        false => wgpu::Limits::default(),
                     },
                     label: None,
                 },
@@ -253,19 +254,6 @@ impl State {
             WindowEvent::KeyboardInput {
                 input:
                     KeyboardInput {
-                        state,
-                        virtual_keycode: Some(VirtualKeyCode::Space),
-                        ..
-                    },
-                ..
-            } => {
-                // self.polygon_buffer.push(make_pentagon(&self.device));
-                self.instance_controller.remove_instance(0);
-                true
-            }
-            WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
                         virtual_keycode: Some(key),
                         state,
                         ..
@@ -304,6 +292,7 @@ impl State {
                 ..
             } => {
                 self.mouse_pressed = *state == ElementState::Pressed;
+                println!("{}", self.mouse_pressed);
                 true
             }
             _ => false,
