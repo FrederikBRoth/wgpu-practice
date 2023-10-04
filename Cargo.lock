@@ -1901,6 +1901,7 @@ dependencies = [
  "cgmath",
  "env_logger",
  "image",
+ "instant",
  "log",
  "pollster",
  "rand",

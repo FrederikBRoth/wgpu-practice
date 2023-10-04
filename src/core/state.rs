@@ -2,7 +2,7 @@ use cgmath::{num_traits::ToPrimitive, InnerSpace, Rotation3};
 use std::iter;
 use wgpu::util::DeviceExt;
 use winit::{
-    event::{KeyboardInput, VirtualKeyCode, WindowEvent},
+    event::{ElementState, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent},
     window::Window,
 };
 
@@ -26,8 +26,9 @@ pub struct State {
     diffuse_bind_group: wgpu::BindGroup,
     diffuse_texture: texture::Texture,
     camera: Camera,
-    camera_controller: CameraController,
+    pub camera_controller: CameraController,
     pub instance_controller: InstanceController,
+    pub mouse_pressed: bool,
 }
 
 impl State {
@@ -162,7 +163,7 @@ impl State {
                 topology: wgpu::PrimitiveTopology::TriangleList, // 1.
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw, // 2.
-                cull_mode: Some(wgpu::Face::Back),
+                cull_mode: None,
                 // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                 polygon_mode: wgpu::PolygonMode::Fill,
                 // Requires Features::DEPTH_CLIP_CONTROL
@@ -201,7 +202,8 @@ impl State {
             ],
             label: Some("diffuse_bind_group"),
         });
-        let camera_controller = CameraController::new(0.2);
+        let camera_controller = CameraController::new(4.0, 0.4);
+        let mouse_pressed = false;
         Self {
             window,
             surface,
@@ -217,6 +219,7 @@ impl State {
             camera,
             camera_controller,
             instance_controller,
+            mouse_pressed,
         }
     }
 
@@ -226,6 +229,9 @@ impl State {
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
+            self.camera
+                .camera_projection
+                .resize(new_size.width, new_size.height);
             self.size = new_size;
             self.config.width = new_size.width;
             self.config.height = new_size.height;
@@ -234,17 +240,16 @@ impl State {
     }
     #[allow(unused_variables)]
     pub fn input(&mut self, event: &WindowEvent) -> bool {
-        self.camera_controller.process_events(event);
         match event {
-            WindowEvent::CursorMoved { position, .. } => {
-                self.clear_color = wgpu::Color {
-                    r: position.x as f64 / self.size.width as f64,
-                    g: position.y as f64 / self.size.height as f64,
-                    b: 1.0,
-                    a: 1.0,
-                };
-                true
-            }
+            // WindowEvent::CursorMoved { position, .. } => {
+            //     self.clear_color = wgpu::Color {
+            //         r: position.x as f64 / self.size.width as f64,
+            //         g: position.y as f64 / self.size.height as f64,
+            //         b: 1.0,
+            //         a: 1.0,
+            //     };
+            //     true
+            // }
             WindowEvent::KeyboardInput {
                 input:
                     KeyboardInput {
@@ -258,6 +263,15 @@ impl State {
                 self.instance_controller.remove_instance(0);
                 true
             }
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        virtual_keycode: Some(key),
+                        state,
+                        ..
+                    },
+                ..
+            } => self.camera_controller.process_keyboard(*key, *state),
             WindowEvent::KeyboardInput {
                 input:
                     KeyboardInput {
@@ -284,15 +298,24 @@ impl State {
                 );
                 true
             }
+            WindowEvent::MouseInput {
+                button: MouseButton::Left,
+                state,
+                ..
+            } => {
+                self.mouse_pressed = *state == ElementState::Pressed;
+                true
+            }
             _ => false,
         }
     }
 
-    pub fn update(&mut self) {
-        self.camera_controller.update_camera(&mut self.camera);
+    pub fn update(&mut self, dt: instant::Duration) {
+        self.camera_controller
+            .update_camera(&mut self.camera.camera, dt);
         self.camera
             .camera_uniform
-            .update_view_proj(&self.camera.camera);
+            .update_view_proj(&self.camera.camera, &self.camera.camera_projection);
         self.queue.write_buffer(
             &self.camera.camera_buffer,
             0,
