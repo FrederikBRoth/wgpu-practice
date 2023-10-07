@@ -221,9 +221,16 @@ impl CameraController {
         }
     }
 
+    #[cfg(target_os = "linux")]
     pub fn process_mouse(&mut self) {
         self.rotate_horizontal = self.delta_x;
         self.rotate_vertical = self.delta_y;
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn process_mouse(&mut self, delta: (f64, f64)) {
+        self.rotate_horizontal = delta.0 as f32;
+        self.rotate_vertical = delta.1 as f32;
     }
 
     pub fn process_scroll(&mut self, delta: &MouseScrollDelta) {
@@ -234,6 +241,7 @@ impl CameraController {
         };
     }
 
+    #[cfg(target_os = "linux")]
     pub fn process_delta(&mut self, delta: (f64, f64)) {
         self.delta_x = self.prev_x - delta.0 as f32;
         self.delta_y = self.prev_y - delta.1 as f32;

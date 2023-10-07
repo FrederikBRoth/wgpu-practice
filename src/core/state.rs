@@ -36,7 +36,6 @@ impl State {
     pub async fn new(window: Window) -> Self {
         let size = window.inner_size();
 
-        window.set_cursor_grab(winit::window::CursorGrabMode::Locked);
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -62,6 +61,8 @@ impl State {
             })
             .await
             .unwrap();
+        println!("Adapter picked");
+        println!("{}", adapter.get_info().name);
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
@@ -242,15 +243,15 @@ impl State {
     #[allow(unused_variables)]
     pub fn input(&mut self, event: &WindowEvent) -> bool {
         match event {
-            // WindowEvent::CursorMoved { position, .. } => {
-            //     self.clear_color = wgpu::Color {
-            //         r: position.x as f64 / self.size.width as f64,
-            //         g: position.y as f64 / self.size.height as f64,
-            //         b: 1.0,
-            //         a: 1.0,
-            //     };
-            //     true
-            // }
+            #[cfg(target_os = "linux")]
+            WindowEvent::CursorMoved { position, .. } => {
+                if self.mouse_pressed {
+                    self.camera_controller.process_mouse();
+                }
+                self.camera_controller
+                    .process_delta((position.x, position.y));
+                true
+            }
             WindowEvent::KeyboardInput {
                 input:
                     KeyboardInput {
@@ -260,32 +261,6 @@ impl State {
                     },
                 ..
             } => self.camera_controller.process_keyboard(*key, *state),
-            WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
-                        state,
-                        virtual_keycode: Some(VirtualKeyCode::R),
-                        ..
-                    },
-                ..
-            } => {
-                let position = cgmath::Vector3 {
-                    x: 0.0,
-                    y: 1.0,
-                    z: 0.0,
-                };
-                self.instance_controller.add_instance(
-                    Instance {
-                        position,
-                        rotation: cgmath::Quaternion::from_axis_angle(
-                            position.normalize(),
-                            cgmath::Deg(45.0),
-                        ),
-                    },
-                    &self.queue,
-                );
-                true
-            }
             WindowEvent::MouseInput {
                 button: MouseButton::Left,
                 state,

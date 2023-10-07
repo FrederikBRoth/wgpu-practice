@@ -1,7 +1,7 @@
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder,
+    window::{CursorGrabMode, WindowBuilder},
 };
 
 use crate::core::state;
@@ -10,21 +10,21 @@ pub async fn run() {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
 
+    window.set_cursor_grab(CursorGrabMode::Confined).unwrap();
     let mut state = state::State::new(window).await;
     let mut last_render_time = instant::Instant::now();
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
+            #[cfg(target_os = "windows")]
             Event::DeviceEvent {
                 event: DeviceEvent::MouseMotion{ delta },
                 .. // We're not using device_id currently
             } => {
                     if state.mouse_pressed {
-                        state.camera_controller.process_mouse();
+                        state.camera_controller.process_mouse(delta);
                         println!("{delta:?}")
                     }
-                    state.camera_controller.process_delta(delta);
-
             }
             Event::WindowEvent {
                 ref event,
