@@ -1,8 +1,9 @@
 use cgmath::{num_traits::ToPrimitive, InnerSpace, Rotation3};
 use std::iter;
-use wgpu::util::DeviceExt;
+use wgpu::{util::DeviceExt, Color};
 use winit::{
-    event::{ElementState, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent},
+    event::{ElementState, KeyEvent, MouseButton, WindowEvent},
+    keyboard::{KeyCode, PhysicalKey},
     window::Window,
 };
 
@@ -40,7 +41,7 @@ impl State {
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
-            dx12_shader_compiler: Default::default(),
+            ..Default::default()
         });
         // # Safety
         //
@@ -48,9 +49,6 @@ impl State {
         // State owns the window so this should be safe.
         let surface = unsafe { instance.create_surface(&window) }.unwrap();
 
-        instance
-            .enumerate_adapters(wgpu::Backends::all())
-            .for_each(|a| println!("{}", a.get_info().name));
         // Check if this adapter supports our surface
 
         let adapter = instance
@@ -103,7 +101,12 @@ impl State {
             view_formats: vec![],
         };
         surface.configure(&device, &config);
-        let clear_color = wgpu::Color::BLACK;
+        let clear_color = wgpu::Color {
+            r: 0.53,
+            g: 0.81,
+            b: 0.92,
+            a: 1.0,
+        };
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
@@ -204,7 +207,7 @@ impl State {
             ],
             label: Some("diffuse_bind_group"),
         });
-        let camera_controller = CameraController::new(4.0, 0.4);
+        let camera_controller = CameraController::new(4.0, 1.0);
         let mouse_pressed = false;
         Self {
             window,
@@ -253,23 +256,23 @@ impl State {
                 true
             }
             WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
-                        virtual_keycode: Some(key),
+                event:
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(code),
                         state,
                         ..
                     },
                 ..
-            } => self.camera_controller.process_keyboard(*key, *state),
-            WindowEvent::MouseInput {
-                button: MouseButton::Left,
-                state,
-                ..
-            } => {
-                self.mouse_pressed = *state == ElementState::Pressed;
-                println!("{}", self.mouse_pressed);
-                true
-            }
+            } => self.camera_controller.process_keyboard(*code, *state),
+            // WindowEvent::MouseInput {
+            //     button: MouseButton::Left,
+            //     state,
+            //     ..
+            // } => {
+            //     self.mouse_pressed = *state == ElementState::Pressed;
+            //     println!("{}", self.mouse_pressed);
+            //     true
+            // }
             _ => false,
         }
     }
@@ -306,10 +309,12 @@ impl State {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(self.clear_color),
-                        store: true,
+                        store: wgpu::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
             render_pass.set_pipeline(&self.render_pipeline); // 2.
                                                              // render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
